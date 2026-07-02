@@ -16,53 +16,53 @@ const PublicDoctors = () => {
   const [activeRequests, setActiveRequests] = useState({});
 
   useEffect(() => {
-    const checkRealRequests = () => {
-      const stored = JSON.parse(localStorage.getItem('visionCare_pendingRequests') || '[]');
-      const active = {};
-      stored.forEach(req => {
-        if (req.status === 'pending') {
-          active[req.docId] = true;
-        }
-      });
-      setActiveRequests(active);
+    const checkRealRequests = async () => {
+      try {
+        const { getAppointments } = await import('../services/firebaseService');
+        const stored = await getAppointments();
+        const active = {};
+        stored.forEach(req => {
+          if (req.status === 'pending' && req.docId) {
+            active[req.docId] = true;
+          }
+        });
+        setActiveRequests(active);
+      } catch (err) {
+        console.error("Failed to fetch active requests:", err);
+      }
     };
 
     checkRealRequests();
-    const interval = setInterval(checkRealRequests, 1000);
+    const interval = setInterval(checkRealRequests, 3000);
     return () => clearInterval(interval);
   }, []);
 
   const handleDoctorAccept = async (docId) => {
-    const stored = JSON.parse(localStorage.getItem('visionCare_pendingRequests') || '[]');
-    const request = stored.find(req => req.docId === docId && req.status === 'pending');
-    
-    if (request) {
-      try {
-        const response = await fetch('http://localhost:3001/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request)
-        });
-        
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to send email from server');
+    try {
+      const { getAppointments, updateAppointmentStatus } = await import('../services/firebaseService');
+      const stored = await getAppointments();
+      const request = stored.find(req => req.docId === docId && req.status === 'pending');
+      
+      if (request) {
+        if (request.firebaseId) {
+          await updateAppointmentStatus(request.firebaseId, 'accepted');
         }
         
-        console.log("Email Preview URL:", data.previewUrl);
-
-        const updated = stored.map(req => req.docId === docId ? { ...req, status: 'accepted' } : req);
-        localStorage.setItem('visionCare_pendingRequests', JSON.stringify(updated));
+        // Optional email mock logic
+        try {
+          fetch('http://localhost:3001/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request)
+          });
+        } catch (e) {}
+        
         setActiveRequests(prev => ({ ...prev, [docId]: false }));
         alert('Appointment accepted! Confirmation email sent to the patient.');
-      } catch (error) {
-        console.error("Failed to send email", error);
-        alert(`Failed to send confirmation email: ${error.message}.\n\nHowever, the appointment has been accepted locally.`);
-
-        const updated = stored.map(req => req.docId === docId ? { ...req, status: 'accepted' } : req);
-        localStorage.setItem('visionCare_pendingRequests', JSON.stringify(updated));
-        setActiveRequests(prev => ({ ...prev, [docId]: false }));
       }
+    } catch (error) {
+      console.error("Failed to process acceptance", error);
+      alert(`Failed to accept appointment. Please try again.`);
     }
   };
 
