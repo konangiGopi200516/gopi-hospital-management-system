@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 10000;
 // Serve the Vite build output
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// SPA fallback - serve index.html for all routes
-app.get('*', (req, res) => {
+// SPA fallback - serve index.html for all unhandled routes
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
