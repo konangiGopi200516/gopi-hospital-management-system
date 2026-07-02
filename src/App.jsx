@@ -28,6 +28,7 @@ import Pharmacy from './pages/Pharmacy';
 import Payroll from './pages/Payroll';
 import Housekeeping from './pages/Housekeeping';
 import AdminAppointments from './pages/AdminAppointments';
+import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Attendance from './pages/Attendance';
 import AddFace from './pages/AddFace';
@@ -81,6 +82,7 @@ function App() {
           <Route path="laboratory" element={<Laboratory />} />
           <Route path="pharmacy" element={<Pharmacy />} />
           <Route path="payroll" element={<Payroll />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="add-face" element={<AddFace />} />
           <Route path="face-attendance" element={<FaceAttendance />} />

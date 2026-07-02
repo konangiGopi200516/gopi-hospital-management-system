@@ -61,9 +61,9 @@ const AdminAppointments = () => {
   };
 
   const filteredRequests = requests.filter(req => 
-    req.patient.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    req.phone.includes(searchQuery) ||
-    req.doc.toLowerCase().includes(searchQuery.toLowerCase())
+    (req.patient || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (req.phone || '').includes(searchQuery) ||
+    (req.doc || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
