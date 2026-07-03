@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Stethoscope, Mail, Phone, Search, Filter } from 'lucide-react';
+import { Stethoscope, Mail, Phone, Search, Filter, CheckCircle } from 'lucide-react';
 import { allDoctors, services } from '../data/mockData';
 
 const getInitials = (name) => {
@@ -13,56 +13,57 @@ const PublicDoctors = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
-  const [activeRequests, setActiveRequests] = useState({});
+  const [appointments, setAppointments] = useState([]);
 
   useEffect(() => {
-    const checkRealRequests = async () => {
+    const fetchAppointments = async () => {
       try {
         const { getAppointments } = await import('../services/firebaseService');
-        const stored = await getAppointments();
-        const active = {};
-        stored.forEach(req => {
-          if (req.status === 'pending' && req.docId) {
-            active[req.docId] = true;
-          }
-        });
-        setActiveRequests(active);
+        const data = await getAppointments();
+        setAppointments(data);
       } catch (err) {
-        console.error("Failed to fetch active requests:", err);
+        console.error("Failed to fetch appointments:", err);
       }
     };
-
-    checkRealRequests();
-    const interval = setInterval(checkRealRequests, 3000);
+    fetchAppointments();
+    const interval = setInterval(fetchAppointments, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleDoctorAccept = async (docId) => {
+  const handleApprove = async (docId, docName) => {
     try {
-      const { getAppointments, updateAppointmentStatus } = await import('../services/firebaseService');
-      const stored = await getAppointments();
-      const request = stored.find(req => req.docId === docId && req.status === 'pending');
+      const { updateAppointmentStatus } = await import('../services/firebaseService');
+      const pendingForDoc = appointments.filter(a => (a.docId === docId || a.doc === docName) && a.status === 'pending');
       
-      if (request) {
-        if (request.firebaseId) {
-          await updateAppointmentStatus(request.firebaseId, 'accepted');
-        }
-        
-        // Optional email mock logic
-        try {
-          fetch('http://localhost:3001/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(request)
+      for (const req of pendingForDoc) {
+        if (req.firebaseId) {
+          await updateAppointmentStatus(req.firebaseId, 'accepted', {
+            acceptedAt: new Date().toISOString(),
+            acceptedBy: docName
           });
-        } catch (e) {}
-        
-        setActiveRequests(prev => ({ ...prev, [docId]: false }));
-        alert('Appointment accepted! Confirmation email sent to the patient.');
+          
+          try {
+            await fetch('http://localhost:3001/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(req)
+            });
+          } catch (e) {
+            console.error("Email send failed", e);
+          }
+        }
       }
+      
+      setAppointments(prev => prev.map(a => 
+        (a.docId === docId || a.doc === docName) && a.status === 'pending' 
+          ? { ...a, status: 'accepted' } 
+          : a
+      ));
+      
+      alert(`Successfully approved ${pendingForDoc.length} appointment(s)!`);
     } catch (error) {
-      console.error("Failed to process acceptance", error);
-      alert(`Failed to accept appointment. Please try again.`);
+      console.error("Failed to approve", error);
+      alert("Failed to approve appointments. Please try again.");
     }
   };
 
@@ -141,43 +142,56 @@ const PublicDoctors = () => {
                 </h3>
                 
                 <div className="flex flex-col border-t border-white/5 bg-[#141D31]/30 rounded-2xl overflow-hidden shadow-lg border border-white/5">
-                  {doctors.map((doc, index) => (
-                    <motion.div 
-                      key={doc.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: (index % 10) * 0.05 }}
-                      className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-white/5 hover:bg-[#141D31]/80 transition-colors gap-6"
-                    >
-                      <div className="flex items-center gap-6 md:w-1/3">
-                        <img 
-                          src={doc.photo} 
-                          alt={doc.name} 
-                          className="hidden sm:block w-14 h-14 rounded-full border-2 border-white/10 object-cover shrink-0 group-hover:border-[#18E0FF]/50 transition-colors"
-                        />
-                        <div>
-                          <h4 className="text-xl font-bold text-[#F8FAFC]">{doc.name}</h4>
-                          <p className="text-sm font-semibold text-[#18E0FF] uppercase tracking-widest mt-1">{doc.specialty}</p>
+                  {/* Headers */}
+                  <div className="hidden md:flex flex-row items-center justify-between p-4 px-6 bg-[#0B1120]/50 border-b border-white/5">
+                    <div className="w-1/4 text-xs font-bold text-[#94A3B8] uppercase tracking-widest">Doctor Profile</div>
+                    <div className="w-1/4 text-xs font-bold text-[#94A3B8] uppercase tracking-widest text-center">Email</div>
+                    <div className="w-1/4 text-xs font-bold text-[#94A3B8] uppercase tracking-widest text-center">Mobile</div>
+                    <div className="w-1/4 text-xs font-bold text-[#94A3B8] uppercase tracking-widest text-right">Action</div>
+                  </div>
+                  {doctors.map((doc, index) => {
+                    const pendingCount = appointments.filter(a => (a.docId === doc.id || a.doc === doc.name) && a.status === 'pending').length;
+                    
+                    return (
+                      <motion.div 
+                        key={doc.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (index % 10) * 0.05 }}
+                        className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-white/5 hover:bg-[#141D31]/80 transition-colors gap-6"
+                      >
+                        <div className="flex items-center gap-6 md:w-1/4">
+                          <img 
+                            src={doc.photo} 
+                            alt={doc.name} 
+                            className="hidden sm:block w-14 h-14 rounded-full border-2 border-white/10 object-cover shrink-0 group-hover:border-[#18E0FF]/50 transition-colors"
+                          />
+                          <div>
+                            <h4 className="text-xl font-bold text-[#F8FAFC]">{doc.name}</h4>
+                            <p className="text-sm font-semibold text-[#18E0FF] uppercase tracking-widest mt-1">{doc.specialty}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex flex-col md:items-center justify-center gap-1.5 text-sm text-[#94A3B8] md:w-1/3">
-                        <div className="flex items-center gap-2 w-fit"><Mail size={14} /> {doc.email}</div>
-                        <div className="flex items-center gap-2 w-fit"><Phone size={14} /> {doc.mobile}</div>
-                      </div>
-                      <div className="flex justify-start md:justify-end md:w-1/3">
-                        <button 
-                          onClick={() => handleDoctorAccept(doc.id)}
-                          className={`text-sm font-bold px-6 py-3 rounded-xl transition-all uppercase tracking-widest text-center whitespace-nowrap ${
-                            activeRequests[doc.id]
-                              ? 'bg-[#FF296D]/10 border border-[#FF296D] text-[#FF296D] shadow-[0_0_15px_rgba(255,41,109,0.3)] hover:bg-[#FF296D]/20 animate-pulse'
-                              : 'bg-[#22C55E]/10 border border-[#22C55E]/30 text-[#22C55E] hover:border-[#22C55E] hover:bg-[#22C55E]/20'
-                          }`}
-                        >
-                          Accept Request
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
+                        <div className="flex items-center justify-center gap-2 text-sm text-[#94A3B8] md:w-1/4 mt-2 md:mt-0">
+                          <Mail size={14} className="text-[#18E0FF]" /> {doc.email}
+                        </div>
+                        <div className="flex items-center justify-center gap-2 text-sm text-[#94A3B8] md:w-1/4 mt-2 md:mt-0">
+                          <Phone size={14} className="text-[#22C55E]" /> {doc.mobile}
+                        </div>
+                        <div className="flex items-center justify-end md:w-1/4 mt-4 md:mt-0">
+                          {pendingCount > 0 ? (
+                            <button 
+                              onClick={() => handleApprove(doc.id, doc.name)}
+                              className="flex items-center justify-center gap-2 text-sm font-bold px-6 py-2.5 rounded-xl transition-all uppercase tracking-widest text-center whitespace-nowrap bg-[#FF4D6D]/10 border border-[#FF4D6D]/30 text-[#FF4D6D] hover:border-[#FF4D6D] hover:bg-[#FF4D6D]/20 animate-pulse shadow-[0_0_15px_rgba(255,77,109,0.1)]"
+                            >
+                              <CheckCircle size={16} /> Approve ({pendingCount})
+                            </button>
+                          ) : (
+                            <span className="text-xs font-bold text-[#94A3B8]/50 uppercase tracking-widest">No Requests</span>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

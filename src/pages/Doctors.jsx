@@ -6,7 +6,7 @@ import {
   MessageSquare, Edit, Heart, Brain, Bone, Baby, Syringe, Eye,
   Stethoscope, Activity
 } from 'lucide-react';
-import { getStaff, updateStaff, addStaff, deleteStaff } from '../services/firebaseService';
+import { getStaff, updateStaff, addStaff, deleteStaff, getAppointments, updateAppointmentStatus } from '../services/firebaseService';
 import AddStaffModal from '../components/AddStaffModal';
 
 const DEPARTMENTS = [
@@ -84,20 +84,72 @@ const ClinicalStaff = () => {
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
+  const [appointments, setAppointments] = useState([]);
+
   useEffect(() => {
-    const fetchDoctors = async () => {
+    const fetchData = async () => {
       try {
-        const staff = await getStaff();
+        const [staff, appts] = await Promise.all([
+          getStaff(),
+          getAppointments()
+        ]);
         const firebaseDoctors = staff.filter(emp => emp.category === 'Doctors');
         setDoctors(generateDoctors(firebaseDoctors));
+        setAppointments(appts);
       } catch (error) {
-        console.error("Failed to fetch doctors from Firebase:", error);
+        console.error("Failed to fetch data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchDoctors();
+    fetchData();
   }, []);
+
+  const handleAcceptAppointment = async (apptFirebaseId, apptId) => {
+    try {
+      const request = appointments.find(r => (apptFirebaseId && r.firebaseId === apptFirebaseId) || (apptId && r.id === apptId));
+      if (apptFirebaseId) {
+        await updateAppointmentStatus(apptFirebaseId, 'accepted', {
+          acceptedBy: selectedDoctor.name,
+          acceptedAt: new Date().toISOString()
+        });
+      }
+
+      // Send email to the patient
+      if (request) {
+        try {
+          const response = await fetch('http://localhost:3001/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request)
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            console.error('Failed to send email from server', data.error);
+          }
+        } catch (emailError) {
+          console.error("Failed to send email", emailError);
+        }
+      }
+
+      const updated = appointments.map(r => ((apptFirebaseId && r.firebaseId === apptFirebaseId) || (apptId && r.id === apptId)) ? { ...r, status: 'accepted' } : r);
+      setAppointments(updated);
+      
+      // Optional: Update doctor's appointmentsToday locally
+      setDoctors(prevDoctors => 
+        prevDoctors.map(doc => {
+          if (doc.id === selectedDoctor.id) {
+            const updatedDoc = { ...doc, appointmentsToday: doc.appointmentsToday + 1 };
+            setSelectedDoctor(updatedDoc);
+            return updatedDoc;
+          }
+          return doc;
+        })
+      );
+    } catch (error) {
+      console.error("Failed to accept appointment", error);
+    }
+  };
 
   const assignPatient = async () => {
     if (!selectedDoctor) return;
@@ -446,6 +498,54 @@ const ClinicalStaff = () => {
                     </div>
                  </div>
               </div>
+
+              {/* Pending Requests */}
+              {(() => {
+                const pendingAppts = appointments.filter(a => (a.docId === selectedDoctor.id || a.docId === selectedDoctor.firebaseId) && a.status === 'pending');
+                if (pendingAppts.length === 0) return null;
+                
+                const todayStr = new Date().toISOString().split('T')[0];
+                const todayAppts = pendingAppts.filter(a => a.date === todayStr);
+                const upcomingAppts = pendingAppts.filter(a => a.date > todayStr);
+
+                const renderAppts = (title, apptsList) => {
+                  if (apptsList.length === 0) return null;
+                  return (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-bold text-[#FF4D6D] uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <Clock size={12} /> {title} ({apptsList.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {apptsList.map(appt => (
+                          <div key={appt.id} className="bg-[#0B1120] border border-[#FF4D6D]/30 p-3 rounded-lg flex flex-col gap-2 relative overflow-hidden shadow-[0_0_15px_rgba(255,77,109,0.05)]">
+                             <div className="absolute top-0 left-0 w-1 h-full bg-[#FF4D6D]"></div>
+                             <div className="flex justify-between items-center pl-2">
+                               <div>
+                                 <p className="text-sm font-bold text-[#F8FAFC]">{appt.patient}</p>
+                                 <p className="text-[10px] font-semibold text-[#94A3B8] mt-0.5">{appt.date} | {appt.time}</p>
+                                 {appt.symptoms && <p className="text-[10px] text-[#94A3B8] mt-1 line-clamp-1 border-t border-white/5 pt-1">Symptoms: {appt.symptoms}</p>}
+                               </div>
+                               <button 
+                                 onClick={() => handleAcceptAppointment(appt.firebaseId, appt.id)}
+                                 className="px-4 py-1.5 bg-[#FF4D6D]/10 text-[#FF4D6D] border border-[#FF4D6D]/20 rounded-md text-[10px] font-bold uppercase tracking-widest hover:bg-[#FF4D6D]/20 transition-all shadow-[0_0_10px_rgba(255,77,109,0.1)] shrink-0 ml-2"
+                               >
+                                 Accept Request
+                               </button>
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="p-6 border-b border-white/5 space-y-4 bg-[#FF4D6D]/5">
+                    {renderAppts("Today's Appointments", todayAppts)}
+                    {renderAppts("Upcoming Appointments", upcomingAppts)}
+                  </div>
+                );
+              })()}
 
               {/* Professional Details */}
               <div className="p-6 space-y-4">

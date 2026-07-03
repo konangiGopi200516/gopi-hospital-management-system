@@ -98,9 +98,14 @@ export const addAppointment = async (appointmentData) => {
   return { firebaseId: newApptRef.key, ...appointmentData };
 };
 
-export const updateAppointmentStatus = async (firebaseId, status) => {
+export const updateAppointmentStatus = async (firebaseId, status, additionalData = {}) => {
   const apptRef = ref(db, `${APPOINTMENTS_PATH}/${firebaseId}`);
-  await update(apptRef, { status });
+  await update(apptRef, { status, ...additionalData });
+};
+
+export const deleteAppointment = async (firebaseId) => {
+  const apptRef = ref(db, `${APPOINTMENTS_PATH}/${firebaseId}`);
+  await remove(apptRef);
 };
 
 // --- Patients Management ---

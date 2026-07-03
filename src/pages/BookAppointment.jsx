@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, User, Phone, Mail, Clock, CheckCircle } from 'lucide-react';
-import { services } from '../data/mockData';
+import { services, allDoctors } from '../data/mockData';
 import { getStaff, addAppointment } from '../services/firebaseService';
 
 const BookAppointment = () => {
@@ -14,6 +14,7 @@ const BookAppointment = () => {
     patientName: '',
     phone: '',
     email: '',
+    symptoms: '',
   });
   const [doctors, setDoctors] = useState([]);
 
@@ -21,9 +22,21 @@ const BookAppointment = () => {
     const fetchDoctors = async () => {
       try {
         const staff = await getStaff();
-        setDoctors(staff.filter(emp => emp.category === 'Doctors'));
+        const firebaseDoctors = staff.filter(emp => emp.category === 'Doctors');
+        
+        // Merge mock doctors and firebase doctors to ensure the dropdown always has options
+        const mergedDoctors = [...allDoctors];
+        
+        firebaseDoctors.forEach(fDoc => {
+          if (!mergedDoctors.find(m => m.name === fDoc.name)) {
+            mergedDoctors.push(fDoc);
+          }
+        });
+        
+        setDoctors(mergedDoctors);
       } catch (error) {
         console.error("Failed to fetch doctors:", error);
+        setDoctors(allDoctors);
       }
     };
     fetchDoctors();
@@ -45,8 +58,10 @@ const BookAppointment = () => {
       dept: formData.department,
       docId: formData.doctorId,
       doc: docName,
+      docEmail: docObj ? docObj.email : '',
       date: formData.date,
       time: formData.time,
+      symptoms: formData.symptoms,
       status: 'pending',
       createdAt: new Date().toISOString()
     };
@@ -208,6 +223,18 @@ const BookAppointment = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-[#94A3B8] mb-2 uppercase tracking-wider">Symptoms / Reason for Visit</label>
+              <textarea 
+                required
+                rows="3"
+                placeholder="Briefly describe your symptoms..."
+                className="w-full bg-[#0B1120] border border-white/10 rounded-xl px-4 py-3 text-[#F8FAFC] focus:outline-none focus:border-[#18E0FF]/50 transition-colors resize-none"
+                value={formData.symptoms}
+                onChange={(e) => setFormData({...formData, symptoms: e.target.value})}
+              ></textarea>
             </div>
           </div>
 

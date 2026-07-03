@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useNavigate, Link } from 'react-router-dom';
+import VisionAIChat from '../VisionAIChat';
 import { Eye, ShieldCheck, Activity, Users, ChevronRight, Stethoscope, Clock, MapPin, Phone, ArrowRight, Scan, Droplet, Mail, X } from 'lucide-react';
 
 const PublicLayout = () => {
   const navigate = useNavigate();
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   return (
     <div className="bg-[#0B1120] min-h-screen text-[#F8FAFC] font-sans selection:bg-[#18E0FF]/30 flex flex-col">
@@ -28,6 +30,15 @@ const PublicLayout = () => {
             <Link to="/patient-portal" className="hover:text-[#F8FAFC] transition-colors">Patient</Link>
           </nav>
           <div className="flex items-center gap-6">
+            {/* Vision AI Badge */}
+            <div 
+              onClick={() => setIsAIOpen(true)}
+              className="flex items-center gap-2 bg-[#18E0FF]/10 border border-[#18E0FF]/20 px-3 py-1.5 rounded-full cursor-pointer hover:bg-[#18E0FF]/20 transition-colors shadow-[0_0_15px_rgba(24,224,255,0.1)]"
+            >
+               <img src="/images/custom_ai_logo.png" alt="AI" className="w-5 h-5 rounded-full shadow-[0_0_8px_rgba(24,224,255,0.4)]" />
+               <span className="text-[10px] font-bold text-[#18E0FF] tracking-widest uppercase hidden sm:block">Vision AI</span>
+            </div>
+
             <button 
               onClick={() => navigate('/appointments/book')}
               className="text-sm font-bold text-[#94A3B8] hover:text-[#18E0FF] transition-colors uppercase tracking-widest hidden sm:block"
@@ -67,6 +78,8 @@ const PublicLayout = () => {
           </div>
         </div>
       </footer>
+
+      <VisionAIChat isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
     </div>
   );
 };

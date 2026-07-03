@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Search, CheckCircle, Clock } from 'lucide-react';
-import { getAppointments, updateAppointmentStatus } from '../services/firebaseService';
+import { Calendar, Search, CheckCircle, Clock, XCircle, Trash2, Edit } from 'lucide-react';
+import { getAppointments, updateAppointmentStatus, deleteAppointment } from '../services/firebaseService';
 
 const AdminAppointments = () => {
   const [requests, setRequests] = useState([]);
@@ -23,16 +23,17 @@ const AdminAppointments = () => {
   }, []);
 
   const handleAcceptRequest = async (reqId, firebaseId) => {
-    const request = requests.find(r => r.firebaseId === firebaseId || r.id === reqId);
+    const request = requests.find(r => (firebaseId && r.firebaseId === firebaseId) || (reqId && r.id === reqId));
     
     if (request && request.status === 'pending') {
       try {
-        // Try to update on Firebase
         if (firebaseId) {
-          await updateAppointmentStatus(firebaseId, 'accepted');
+          await updateAppointmentStatus(firebaseId, 'accepted', {
+            acceptedAt: new Date().toISOString(),
+            acceptedBy: 'Administrator'
+          });
         }
         
-        // Mock email logic
         try {
           const response = await fetch('http://localhost:3001/api/send-email', {
             method: 'POST',
@@ -43,14 +44,11 @@ const AdminAppointments = () => {
           if (!response.ok || !data.success) {
             throw new Error(data.error || 'Failed to send email from server');
           }
-          alert('Appointment accepted! Confirmation email sent to the patient.');
         } catch (emailError) {
           console.error("Failed to send email", emailError);
-          alert(`Failed to send confirmation email. However, the appointment has been accepted.`);
         }
         
-        // Update local state immediately
-        const updated = requests.map(r => r.firebaseId === firebaseId || r.id === reqId ? { ...r, status: 'accepted' } : r);
+        const updated = requests.map(r => ((firebaseId && r.firebaseId === firebaseId) || (reqId && r.id === reqId)) ? { ...r, status: 'accepted' } : r);
         setRequests(updated);
 
       } catch (error) {
@@ -58,6 +56,30 @@ const AdminAppointments = () => {
         alert("Failed to accept appointment. Please try again.");
       }
     }
+  };
+
+  const handleRejectRequest = async (reqId, firebaseId) => {
+    try {
+      if (firebaseId) await updateAppointmentStatus(firebaseId, 'rejected');
+      setRequests(prev => prev.map(r => ((firebaseId && r.firebaseId === firebaseId) || (reqId && r.id === reqId)) ? { ...r, status: 'rejected' } : r));
+    } catch (error) {
+      console.error("Failed to reject appointment", error);
+    }
+  };
+
+  const handleDeleteRequest = async (reqId, firebaseId) => {
+    if (window.confirm('Are you sure you want to delete this appointment?')) {
+      try {
+        if (firebaseId) await deleteAppointment(firebaseId);
+        setRequests(prev => prev.filter(r => !((firebaseId && r.firebaseId === firebaseId) || (reqId && r.id === reqId))));
+      } catch (error) {
+        console.error("Failed to delete appointment", error);
+      }
+    }
+  };
+
+  const handleReschedule = () => {
+    alert("Reschedule workflow would open a date picker here.");
   };
 
   const filteredRequests = requests.filter(req => 
@@ -126,19 +148,44 @@ const AdminAppointments = () => {
                   <span className="text-xs font-semibold text-[#94A3B8]">{req.time}</span>
                 </div>
 
-                <div className="flex items-center justify-end min-w-[150px]">
+                <div className="flex items-center justify-end min-w-[200px] gap-2">
                   {req.status === 'pending' ? (
-                    <button 
-                      onClick={() => handleAcceptRequest(req.id, req.firebaseId)}
-                      className="w-full md:w-auto px-6 py-2.5 bg-[#18E0FF]/10 hover:bg-[#18E0FF]/20 text-[#18E0FF] border border-[#18E0FF]/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-[0_0_10px_rgba(24,224,255,0.1)]"
-                    >
-                      Accept
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleAcceptRequest(req.id, req.firebaseId)}
+                        className="px-4 py-2 bg-[#22C55E]/10 hover:bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                        title="Accept"
+                      >
+                        <CheckCircle size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleRejectRequest(req.id, req.firebaseId)}
+                        className="px-4 py-2 bg-[#FF4D6D]/10 hover:bg-[#FF4D6D]/20 text-[#FF4D6D] border border-[#FF4D6D]/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                        title="Reject"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                      <button 
+                        onClick={handleReschedule}
+                        className="px-4 py-2 bg-[#FACC15]/10 hover:bg-[#FACC15]/20 text-[#FACC15] border border-[#FACC15]/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                        title="Reschedule"
+                      >
+                        <Edit size={16} />
+                      </button>
+                    </div>
                   ) : (
-                    <div className="w-full md:w-auto px-6 py-2.5 bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                      <CheckCircle size={14} /> Accepted
+                    <div className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${req.status === 'accepted' ? 'bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20' : 'bg-[#FF4D6D]/10 text-[#FF4D6D] border border-[#FF4D6D]/20'}`}>
+                      {req.status === 'accepted' ? <CheckCircle size={14} /> : <XCircle size={14} />} {req.status}
                     </div>
                   )}
+                  
+                  <button 
+                    onClick={() => handleDeleteRequest(req.id, req.firebaseId)}
+                    className="px-3 py-2 bg-white/5 hover:bg-red-500/20 text-white/40 hover:text-red-500 rounded-xl transition-all ml-2"
+                    title="Delete Record"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
             )) : (
